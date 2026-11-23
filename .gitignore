@@ -2,6 +2,11 @@
 ._*
 .idea/
 .vscode/
+.venv/
+venv/
+__pycache__/
+.pytest_cache/
+*.py[cod]
 
 .env
 .env.*
@@ -10,5 +15,7 @@
 *.log
 *.tmp
 *.bak
+*.db
+*.sqlite3
 ~$*
 tmp/
