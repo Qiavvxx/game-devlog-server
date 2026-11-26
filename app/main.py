@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+from datetime import date
 import sqlite3
 
 from fastapi import Depends, FastAPI, HTTPException, Response, status
@@ -6,15 +7,23 @@ from fastapi.security import OAuth2PasswordRequestForm
 
 from app.database import init_database
 from app.models import (
+    create_entry,
     create_project,
     create_user,
+    delete_entry,
     delete_project,
+    get_entry_for_user,
     get_project_for_user,
     get_user_by_username,
+    list_entries,
     list_projects,
+    update_entry,
     update_project,
 )
 from app.schemas import (
+    EntryCategory,
+    EntryInput,
+    EntryPublic,
     ProjectInput,
     ProjectPublic,
     TokenResponse,
@@ -119,4 +128,90 @@ def edit_project(
 def remove_project(project_id: int, user: dict = Depends(get_current_user)):
     if not delete_project(project_id, user["id"]):
         raise HTTPException(status_code=404, detail="Проект не найден")
+    return Response(status_code=204)
+
+
+
+def _entry_or_404(entry_id: int, user_id: int):
+    entry = get_entry_for_user(entry_id, user_id)
+    if entry is None:
+        raise HTTPException(status_code=404, detail="Запись не найдена")
+    return entry
+
+
+@app.get(
+    "/projects/{project_id}/entries",
+    response_model=list[EntryPublic],
+    tags=["Записи дневника"],
+)
+def get_project_entries(
+    project_id: int,
+    category: EntryCategory | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
+    user: dict = Depends(get_current_user),
+):
+    _project_or_404(project_id, user["id"])
+    if date_from is not None and date_to is not None and date_from > date_to:
+        raise HTTPException(status_code=422, detail="Начальная дата позже конечной")
+    return list_entries(
+        project_id,
+        category,
+        date_from.isoformat() if date_from else None,
+        date_to.isoformat() if date_to else None,
+    )
+
+
+@app.post(
+    "/projects/{project_id}/entries",
+    response_model=EntryPublic,
+    status_code=201,
+    tags=["Записи дневника"],
+)
+def add_project_entry(
+    project_id: int,
+    payload: EntryInput,
+    user: dict = Depends(get_current_user),
+):
+    _project_or_404(project_id, user["id"])
+    return create_entry(
+        project_id,
+        payload.entry_date.isoformat(),
+        payload.completed,
+        payload.difficulties,
+        payload.next_step,
+        payload.category,
+        payload.minutes_spent,
+    )
+
+
+@app.get("/entries/{entry_id}", response_model=EntryPublic, tags=["Записи дневника"])
+def get_entry(entry_id: int, user: dict = Depends(get_current_user)):
+    return _entry_or_404(entry_id, user["id"])
+
+
+@app.put("/entries/{entry_id}", response_model=EntryPublic, tags=["Записи дневника"])
+def edit_entry(
+    entry_id: int,
+    payload: EntryInput,
+    user: dict = Depends(get_current_user),
+):
+    _entry_or_404(entry_id, user["id"])
+    update_entry(
+        entry_id,
+        user["id"],
+        payload.entry_date.isoformat(),
+        payload.completed,
+        payload.difficulties,
+        payload.next_step,
+        payload.category,
+        payload.minutes_spent,
+    )
+    return _entry_or_404(entry_id, user["id"])
+
+
+@app.delete("/entries/{entry_id}", status_code=204, tags=["Записи дневника"])
+def remove_entry(entry_id: int, user: dict = Depends(get_current_user)):
+    if not delete_entry(entry_id, user["id"]):
+        raise HTTPException(status_code=404, detail="Запись не найдена")
     return Response(status_code=204)

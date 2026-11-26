@@ -1,9 +1,11 @@
+from datetime import date
 from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
 
 ProjectStatus = Literal["idea", "in_development", "testing", "released", "paused"]
+EntryCategory = Literal["game_design", "programming", "graphics", "audio", "testing", "other"]
 
 
 class UserCreate(BaseModel):
@@ -56,5 +58,48 @@ class ProjectPublic(BaseModel):
     genre: str
     engine: str
     status: ProjectStatus
+    created_at: str
+    updated_at: str
+
+
+class EntryInput(BaseModel):
+    entry_date: date
+    completed: str = Field(min_length=1, max_length=10000)
+    difficulties: str = Field(default="", max_length=10000)
+    next_step: str = Field(default="", max_length=10000)
+    category: EntryCategory = Field(
+        default="other",
+        description="game_design, programming, graphics, audio, testing или other",
+    )
+    minutes_spent: int = Field(
+        default=0,
+        ge=0,
+        le=1440,
+        description="Время на работу в минутах",
+    )
+
+    @field_validator("completed")
+    @classmethod
+    def clean_completed(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("Заполни поле о выполненной работе")
+        return value
+
+    @field_validator("difficulties", "next_step")
+    @classmethod
+    def clean_optional_text(cls, value: str) -> str:
+        return value.strip()
+
+
+class EntryPublic(BaseModel):
+    id: int
+    project_id: int
+    entry_date: date
+    completed: str
+    difficulties: str
+    next_step: str
+    category: EntryCategory
+    minutes_spent: int
     created_at: str
     updated_at: str
