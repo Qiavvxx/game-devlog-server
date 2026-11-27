@@ -8,24 +8,34 @@ from fastapi.security import OAuth2PasswordRequestForm
 from app.database import init_database
 from app.models import (
     create_entry,
+    create_task,
     create_project,
     create_user,
     delete_entry,
+    delete_task,
     delete_project,
     get_entry_for_user,
     get_project_for_user,
+    get_project_summary,
+    get_task_for_user,
     get_user_by_username,
     list_entries,
     list_projects,
+    list_tasks,
     update_entry,
+    update_task,
     update_project,
 )
 from app.schemas import (
     EntryCategory,
     EntryInput,
     EntryPublic,
+    ProjectSummary,
     ProjectInput,
     ProjectPublic,
+    TaskInput,
+    TaskPublic,
+    TaskStatus,
     TokenResponse,
     UserCreate,
     UserPublic,
@@ -214,4 +224,89 @@ def edit_entry(
 def remove_entry(entry_id: int, user: dict = Depends(get_current_user)):
     if not delete_entry(entry_id, user["id"]):
         raise HTTPException(status_code=404, detail="Запись не найдена")
+    return Response(status_code=204)
+
+
+
+def _task_or_404(task_id: int, user_id: int):
+    task = get_task_for_user(task_id, user_id)
+    if task is None:
+        raise HTTPException(status_code=404, detail="Задача не найдена")
+    return task
+
+
+@app.get(
+    "/projects/{project_id}/summary",
+    response_model=ProjectSummary,
+    tags=["Проекты"],
+)
+def get_project_progress(project_id: int, user: dict = Depends(get_current_user)):
+    _project_or_404(project_id, user["id"])
+    return get_project_summary(project_id)
+
+
+@app.get(
+    "/projects/{project_id}/tasks",
+    response_model=list[TaskPublic],
+    tags=["Задачи проекта"],
+)
+def get_project_tasks(
+    project_id: int,
+    status: TaskStatus | None = None,
+    user: dict = Depends(get_current_user),
+):
+    _project_or_404(project_id, user["id"])
+    return list_tasks(project_id, status)
+
+
+@app.post(
+    "/projects/{project_id}/tasks",
+    response_model=TaskPublic,
+    status_code=201,
+    tags=["Задачи проекта"],
+)
+def add_project_task(
+    project_id: int,
+    payload: TaskInput,
+    user: dict = Depends(get_current_user),
+):
+    _project_or_404(project_id, user["id"])
+    return create_task(
+        project_id,
+        payload.title,
+        payload.description,
+        payload.status,
+        payload.priority,
+        payload.due_date.isoformat() if payload.due_date else None,
+    )
+
+
+@app.get("/tasks/{task_id}", response_model=TaskPublic, tags=["Задачи проекта"])
+def get_task(task_id: int, user: dict = Depends(get_current_user)):
+    return _task_or_404(task_id, user["id"])
+
+
+@app.put("/tasks/{task_id}", response_model=TaskPublic, tags=["Задачи проекта"])
+def edit_task(
+    task_id: int,
+    payload: TaskInput,
+    user: dict = Depends(get_current_user),
+):
+    _task_or_404(task_id, user["id"])
+    update_task(
+        task_id,
+        user["id"],
+        payload.title,
+        payload.description,
+        payload.status,
+        payload.priority,
+        payload.due_date.isoformat() if payload.due_date else None,
+    )
+    return _task_or_404(task_id, user["id"])
+
+
+@app.delete("/tasks/{task_id}", status_code=204, tags=["Задачи проекта"])
+def remove_task(task_id: int, user: dict = Depends(get_current_user)):
+    if not delete_task(task_id, user["id"]):
+        raise HTTPException(status_code=404, detail="Задача не найдена")
     return Response(status_code=204)

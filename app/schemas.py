@@ -6,6 +6,8 @@ from pydantic import BaseModel, Field, field_validator
 
 ProjectStatus = Literal["idea", "in_development", "testing", "released", "paused"]
 EntryCategory = Literal["game_design", "programming", "graphics", "audio", "testing", "other"]
+TaskStatus = Literal["planned", "in_progress", "done"]
+TaskPriority = Literal["low", "medium", "high"]
 
 
 class UserCreate(BaseModel):
@@ -101,5 +103,56 @@ class EntryPublic(BaseModel):
     next_step: str
     category: EntryCategory
     minutes_spent: int
+    created_at: str
+    updated_at: str
+
+
+class ProjectSummary(BaseModel):
+    project_id: int
+    project_title: str
+    status: ProjectStatus
+    entries_count: int
+    minutes_spent: int
+    last_entry_date: date | None
+    category_counts: dict[str, int]
+    tasks_count: int
+    tasks_by_status: dict[str, int]
+
+
+class TaskInput(BaseModel):
+    title: str = Field(min_length=1, max_length=160)
+    description: str = Field(default="", max_length=4000)
+    status: TaskStatus = Field(
+        default="planned",
+        description="planned, in_progress или done",
+    )
+    priority: TaskPriority = Field(
+        default="medium",
+        description="low, medium или high",
+    )
+    due_date: date | None = None
+
+    @field_validator("title")
+    @classmethod
+    def clean_task_title(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("Название задачи не может быть пустым")
+        return value
+
+    @field_validator("description")
+    @classmethod
+    def clean_task_description(cls, value: str) -> str:
+        return value.strip()
+
+
+class TaskPublic(BaseModel):
+    id: int
+    project_id: int
+    title: str
+    description: str
+    status: TaskStatus
+    priority: TaskPriority
+    due_date: date | None
     created_at: str
     updated_at: str
